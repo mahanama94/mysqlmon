@@ -26,7 +26,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {}).
+-record(state, {routing}).
 
 %%%===================================================================
 %%% API
@@ -62,7 +62,9 @@ start_link() ->
 	{ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
 	{stop, Reason :: term()} | ignore).
 init([]) ->
-	{ok, #state{}}.
+	Services = application:get_env(mysqlmon, services, []),
+	Routing = initialize_routing(Services),
+	{ok, #state{ routing = Routing}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -81,11 +83,25 @@ init([]) ->
 	{stop, Reason :: term(), NewState :: #state{}}).
 handle_call({Service, Event}, _From, State) ->
 	?LOGMSG(?APP_NAME, ?INFO, "~p | ~p Service : ~p Event : ~p ~n", [?MODULE,?LINE, Service, Event]),
+	case proplists:get_value(Service, State#state.routing) of
+		undefined ->
+			ok;
+		RoutingInfo ->
+			lists:foreach(fun(Pid) -> gen_server:call(Pid,{Service, Event}, 1000) end, RoutingInfo)
+	end,
 	{reply, ok, State};
 
 handle_call({subscribe, Service, Pid}, _From, State) ->
 	?LOGMSG(?APP_NAME, ?INFO, "~p | ~p registering Pid : ~p for Service : ~p ~n", [?MODULE, ?LINE, Pid, Service]),
-	{reply, ok, State};
+	NewState =
+	case proplists:get_value(Service, State#state.routing) of
+		undefined ->
+			State;
+		RoutingInfo ->
+			Routing = lists:keyreplace(Service, 1, State#state.routing, {Service, lists:append(RoutingInfo, [Pid])}),
+			State#state{routing = Routing}
+	end,
+	{reply, ok, NewState};
 
 handle_call(_Request, _From, State) ->
 	{reply, ok, State}.
@@ -154,3 +170,6 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+initialize_routing(Services) ->
+	lists:map(fun(Service) -> {Service, []} end, Services).

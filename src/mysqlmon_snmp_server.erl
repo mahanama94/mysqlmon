@@ -26,7 +26,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {}).
+-record(state, {subscriptions, status}).
 
 %%%===================================================================
 %%% API
@@ -62,8 +62,9 @@ start_link() ->
 	{ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
 	{stop, Reason :: term()} | ignore).
 init([]) ->
-	?LOGMSG(?APP_NAME, ?INFO, "~p | ~p starting mysqlmon_snmp_server ~n", [?MODULE, ?LINE]),
-	{ok, #state{}}.
+	?LOGMSG(?APP_NAME, ?INFO, "~p | ~p starting mysqlmon_snmp_server Pid : ~p ~n", [?MODULE, ?LINE,  self()]),
+	Subscriptions = application:get_env(mysqlmon, services, []),
+	{ok, #state{subscriptions = Subscriptions, status = not_subscribed}, 1000}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -81,7 +82,8 @@ init([]) ->
 	{stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
 	{stop, Reason :: term(), NewState :: #state{}}).
 
-handle_call(_Request, _From, State) ->
+handle_call(Request, _From, State) ->
+	?LOGMSG(?APP_NAME, ?INFO, "~p | ~p unsupported handle_call Request : ~p ~n", [?MODULE, ?LINE, Request]),
 	{reply, ok, State}.
 
 %%--------------------------------------------------------------------
@@ -112,7 +114,14 @@ handle_cast(_Request, State) ->
 	{noreply, NewState :: #state{}} |
 	{noreply, NewState :: #state{}, timeout() | hibernate} |
 	{stop, Reason :: term(), NewState :: #state{}}).
-handle_info(_Info, State) ->
+
+handle_info(timeout, #state{ status = not_subscribed} = State) ->
+	?LOGMSG(?APP_NAME, ?INFO, "~p | ~p handling timeout ~n", [?MODULE, ?LINE]),
+	subscribe_services(State#state.subscriptions),
+	{noreply, State#state{ status = subscribed}};
+	
+handle_info(Info, State) ->
+	?LOGMSG(?APP_NAME, ?INFO, "~p | ~p unsupported handle info Info : ~p ~n", [?MODULE, ?LINE, Info]),
 	{noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -148,3 +157,6 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+subscribe_services(Services) ->
+	lists:map(fun(Service) -> mysqlmon_util:subscribe_service(Service, self()) end, Services).

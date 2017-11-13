@@ -133,15 +133,23 @@ handle_cast(_Request, State) ->
 	{noreply, NewState :: #state{}, timeout() | hibernate} |
 	{stop, Reason :: term(), NewState :: #state{}}).
 
+%% TODO -complete issue reporting
 handle_info(timeout, State) ->
 	CheckInterval = State#state.check_interval,
 	CmdData = os:cmd("ndb_mgm -e 'all report memory'"),
+%%	CmdData = "Connected to Management Server at: 192.168.20.20:1186\nNode 2: Data usage is 69%(272875 32K pages of total 393216)\nNode 2: Index usage is 48%(378595 8K pages of total 786464)\nNode 3: Data usage is 69%(272929 32K pages of total 393216)\nNode 3: Index usage is 48%(378654 8K pages of total 786464)\n\n",
 	case string:str(CmdData, "not found") of
 		0 ->
 			case string:str(CmdData, "Unable to connect") of
 				0 ->
-					%% process cmd data
-					ok;
+					ProcessedData = process_cmd_data(CmdData),
+					case check_nodes(ProcessedData,State) of
+						ok->
+							ok;
+						NodeIssues ->
+							?LOGMSG(?APP_NAME, ?INFO, "~p | ~p Node Issues : ~p ~n", [?MODULE, ?LINE, NodeIssues]),
+							mysqlmon_util:send_router(?SERVICE,NodeIssues)
+					end;
 				_Other ->
 					mysqlmon_util:send_router(?SERVICE, unable_to_connect)
 			end;
@@ -187,3 +195,73 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+process_cmd_data(CmdData) ->
+	{_, Rest} = lists:split(1, string:tokens(CmdData, "\n")),
+	case Rest of
+		[] ->
+			{error, no_data};
+		Else ->
+			lists:map(fun(Line) -> process_line(Line) end, Else)
+	end.
+
+process_line(Line) ->
+	PercPosition =  string:str(Line, "%") - 2,
+	{MemData, _} = string:to_integer(string:sub_string(Line, PercPosition, PercPosition + 1)),
+	MemType =
+	case string:str(Line, "Data") of
+		0 ->
+			index;
+		_Else ->
+			data
+	end,
+	ColPosition = string:str(Line, ":") - 2,
+	{NodeId, _} = string:to_integer(string:strip(string:sub_string(Line, ColPosition,ColPosition+ 1 ))),
+	{NodeId,MemData, MemType}.
+
+check_nodes([NodeData], State) ->
+	case check_nodes(NodeData, State) of
+		ok ->
+			ok;
+		Else ->
+			[Else]
+	end;
+
+check_nodes([NodeData | Rest], State) ->
+	case check_nodes(NodeData, State) of
+		ok ->
+			check_nodes(Rest, State);
+		Issue ->
+			[Issue] ++ check_nodes(Rest, State)
+	end;
+
+check_nodes(NodeData, State) ->
+	case NodeData of
+		{NodeId, MemData, index} ->
+			if
+				MemData > State#state.crit_index ->
+					memory_issue(NodeId, MemData, State#state.crit_index, index, critical);
+				MemData > State#state.warn_index ->
+					memory_issue(NodeId, MemData, State#state.crit_index, index, warning);
+				true ->
+					ok
+			end;
+		{NodeId, MemData, data} ->
+			if
+				MemData > State#state.crit_data ->
+					memory_issue(NodeId, MemData, State#state.crit_index, data, critical);
+				MemData > State#state.warn_data ->
+					memory_issue(NodeId, MemData, State#state.crit_index, data, warning);
+				true ->
+					ok
+			end
+	end.
+
+memory_issue(NodeId, MemData, Threshold, MemType, IssueType) ->
+	[
+		{node_id, NodeId},
+		{memory, MemData},
+		{threshold, Threshold},
+		{memory_type, MemType},
+		{issue_type, IssueType}
+	].
