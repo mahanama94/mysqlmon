@@ -74,8 +74,9 @@ start_link(Args) ->
 	{ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
 	{stop, Reason :: term()} | ignore).
 init(Args) ->
+	?LOGMSG(?APP_NAME, ?INFO, "~p | ~p Args : ~p ~n", [?MODULE, ?LINE, Args]),
 	CheckInterval   = proplists:get_value(check_interval, Args, 1000),
-PidFilePath         = proplists:get_value(check_interval, Args, "/var/lib/mysql-cluster/"),
+	PidFilePath     = proplists:get_value(check_interval, Args, "/var/lib/mysql-cluster/"),
 	NodeType        = proplists:get_value(node_type, Args, ndb),
 	Node            = proplists:get_value(node_id, Args, 0),
 	NodeId =

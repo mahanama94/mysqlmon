@@ -58,24 +58,36 @@ start_link() ->
   ignore |
   {error, Reason :: term()}).
 init([]) ->
-  RestartStrategy = one_for_one,
-  MaxRestarts = 1000,
-  MaxSecondsBetweenRestarts = 3600,
+	RestartStrategy = one_for_one,
+	MaxRestarts = 1000,
+	MaxSecondsBetweenRestarts = 3600,
+	
+	SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
+	
+	Services = application:get_env(mysqlmon, services, []),
+	ChildSpecs = get_childspecs(Services),
 
-  SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
-
-  Restart = permanent,
-  Shutdown = 2000,
-  Type = worker,
-
-  ChildSpecs = [
-%%    {mysqlmon_txcount_server, {mysqlmon_txcount_server, start_link, [?MYSQL_TXCOUNT]}, Restart, Shutdown, Type, [mysqlmon_txcount_server]},
-%%    {mysqlmon_con_count_server, {mysqlmon_con_count_server, start_link, [?MYSQL_CONCOUNT]}, Restart, Shutdown,Type, [mysqlmon_con_count_server]},
-    {mysqlmon_pidfile_server, {mysqlmon_pidfile_server, start_link, [?MYSQL_PIDFILE]}, Restart,Shutdown, Type, [mysqlmon_pidfile_server]}
-  ],
-
-  {ok, {SupFlags, ChildSpecs}}.
+	{ok, {SupFlags, ChildSpecs}}.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+get_childspecs([]) ->
+	[];
+
+get_childspecs([Service| Rest]) ->
+	lists:concat([[get_childspecs(Service)] , get_childspecs(Rest)]);
+	
+get_childspecs([Service]) ->
+	get_childspecs(Service);
+	
+get_childspecs(Service) ->
+	Restart = permanent,
+	Shutdown = 2000,
+	Type = worker,
+	
+	AppConfig = application:get_env(mysqlmon, Service, []),
+	{Service, {Service, start_link, [AppConfig]}, Restart,Shutdown, Type, [Service]}.
+	
+	

@@ -65,7 +65,8 @@ init([]) ->
   SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
   ChildSpecs = [
     supervisor(mysqlmon_notification_sup,[]),
-    supervisor(mysqlmon_service_sup, [])
+    supervisor(mysqlmon_service_sup, []),
+    server(mysqlmon_router_server, [])
   ],
 
   {ok, {SupFlags, ChildSpecs}}.
@@ -77,6 +78,13 @@ init([]) ->
 supervisor(Module, Args) ->
   Restart = permanent,
   Shutdown = 2000,
-  Type = worker,
+  Type = supervisor,
 
+  {Module, {Module, start_link, Args}, Restart, Shutdown, Type, [Module]}.
+
+server(Module, Args) ->
+  Restart = permanent,
+  Shutdown = 2000,
+  Type = worker,
+  
   {Module, {Module, start_link, Args}, Restart, Shutdown, Type, [Module]}.

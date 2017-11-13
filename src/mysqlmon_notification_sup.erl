@@ -67,12 +67,21 @@ init([]) ->
 	Restart = permanent,
 	Shutdown = 2000,
 	Type = worker,
+%%	ChildSpecs = [
+%%		{mysqlmon_router_server, {mysqlmon_router_server, start_link, []}, Restart, Shutdown, Type, [mysqlmon_router_server]}
+%%	],
 	ChildSpecs = [
-		{mysqlmon_router_server, {mysqlmon_router_server, start_link, []}, Restart, Shutdown, Type, [mysqlmon_router_server]}
+		server(mysqlmon_snmp_server,[])
 	],
-	
 	{ok, {SupFlags, ChildSpecs}}.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+server(Module, Args) ->
+	Restart = permanent,
+	Shutdown = 2000,
+	Type = worker,
+	
+	{Module, {Module, start_link, Args}, Restart, Shutdown, Type, [Module]}.

@@ -4,9 +4,9 @@
 %%% @doc
 %%%
 %%% @end
-%%% Created : 10. Nov 2017 12:02 PM
+%%% Created : 13. Nov 2017 10:32 AM
 %%%-------------------------------------------------------------------
--module(mysqlmon_router_server).
+-module(mysqlmon_snmp_server).
 -author("bhanuka").
 
 -include("mysqlmon.hrl").
@@ -62,6 +62,7 @@ start_link() ->
 	{ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
 	{stop, Reason :: term()} | ignore).
 init([]) ->
+	?LOGMSG(?APP_NAME, ?INFO, "~p | ~p starting mysqlmon_snmp_server ~n", [?MODULE, ?LINE]),
 	{ok, #state{}}.
 
 %%--------------------------------------------------------------------
@@ -79,13 +80,6 @@ init([]) ->
 	{noreply, NewState :: #state{}, timeout() | hibernate} |
 	{stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
 	{stop, Reason :: term(), NewState :: #state{}}).
-handle_call({Service, Event}, _From, State) ->
-	?LOGMSG(?APP_NAME, ?INFO, "~p | ~p Service : ~p Event : ~p ~n", [?MODULE,?LINE, Service, Event]),
-	{reply, ok, State};
-
-handle_call({subscribe, Service, Pid}, _From, State) ->
-	?LOGMSG(?APP_NAME, ?INFO, "~p | ~p registering Pid : ~p for Service : ~p ~n", [?MODULE, ?LINE, Pid, Service]),
-	{reply, ok, State};
 
 handle_call(_Request, _From, State) ->
 	{reply, ok, State}.

@@ -36,6 +36,7 @@
   code_change/3]).
 
 -define(SERVER, ?MODULE).
+-define(SERVICE, ?MODULE).
 
 -record(state, {service_name, pidfile_path, check_interval, pidfile_name}).
 
@@ -141,21 +142,27 @@ handle_info(timeout, State) ->
 				CmdData  = string:tokens(os:cmd("ps -p "++ MysqlPid), "\n"),
 				case length(CmdData) of
 					1 ->
+						mysqlmon_util:send_router(?SERVICE, process_doesnt_exist),
 						?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p mysql process doesn't exists Pid : ~p ~n", [?MODULE, ?LINE, MysqlPid]);
 					_ ->
 						?LOGMSG(?APP_NAME,?INFO, "~p | ~p mysql process exists Pid : ~p ~n", [?MODULE, ?LINE, MysqlPid])
 				end ;
 			{error, Reason} ->
+				mysqlmon_util:send_router(?SERVICE, error_reading_pidfile),
 				?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p Error Reading file Reason : ~p ~n", [?MODULE, ?LINE, Reason]);
 			eof ->
+				mysqlmon_util:send_router(?SERVICE, pidfile_empty),
 				?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p File is empty ~n", [?MODULE, ?LINE])
 		end,
 		file:close(IoDevice);
 	{error, enoent} ->
+		mysqlmon_util:send_router(?SERVICE, file_not_found),
 		?LOGMSG(?APP_NAME, ?INFO, "~p | ~p file not found Reason : ~p ~n", [?MODULE, ?LINE, enoent]);
 	{error, eacces} ->
+		mysqlmon_util:send_router(?SERVICE, file_access_denied),
 		?LOGMSG(?APP_NAME, ?INFO, "~p | ~p file access failed Reason : ~p ~n", [?MODULE, ?LINE, eaccess]);
 	{error, Reason} ->
+		mysqlmon_util:send_router(?SERVICE, file_error),
 		?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p mysql pidfile missing Reason : ~p Path ~p ~n", [?MODULE, ?LINE, Reason, FilePath])
 	end,
 	{noreply, State, CheckInterval};
