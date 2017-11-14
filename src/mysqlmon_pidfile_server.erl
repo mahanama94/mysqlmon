@@ -142,9 +142,10 @@ handle_info(timeout, State) ->
 				CmdData  = string:tokens(os:cmd("ps -p "++ MysqlPid), "\n"),
 				case length(CmdData) of
 					1 ->
-						mysqlmon_util:send_router(?SERVICE, process_doesnt_exist),
+						mysqlmon_util:send_router(?SERVICE, [{type, process_error}, {reason, process_doesnt_exist}]),
 						?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p mysql process doesn't exists Pid : ~p ~n", [?MODULE, ?LINE, MysqlPid]);
 					_ ->
+						mysqlmon_util:send_router()
 						?LOGMSG(?APP_NAME,?INFO, "~p | ~p mysql process exists Pid : ~p ~n", [?MODULE, ?LINE, MysqlPid])
 				end ;
 			{error, Reason} ->

@@ -37,6 +37,7 @@
 	code_change/3]).
 
 -define(SERVER, ?MODULE).
+-define(SERVICE, ?MODULE).
 
 -record(state, {check_interval, pidfile_path, node_id, node_type}).
 
@@ -76,7 +77,7 @@ start_link(Args) ->
 init(Args) ->
 	?LOGMSG(?APP_NAME, ?INFO, "~p | ~p Args : ~p ~n", [?MODULE, ?LINE, Args]),
 	CheckInterval   = proplists:get_value(check_interval, Args, 1000),
-	PidFilePath     = proplists:get_value(check_interval, Args, "/var/lib/mysql-cluster/"),
+	PidFilePath     = proplists:get_value(pidfile_path, Args, "/var/lib/mysql-cluster/"),
 	NodeType        = proplists:get_value(node_type, Args, ndb),
 	Node            = proplists:get_value(node_id, Args, 0),
 	NodeId =
@@ -135,7 +136,7 @@ handle_cast(_Request, State) ->
 	{noreply, NewState :: #state{}} |
 	{noreply, NewState :: #state{}, timeout() | hibernate} |
 	{stop, Reason :: term(), NewState :: #state{}}).
-%% TODO - send notification
+
 handle_info(timeout, State) ->
 	CheckInterval = State#state.check_interval,
 	NodeType = State#state.node_type,
@@ -151,21 +152,27 @@ handle_info(timeout, State) ->
 					CmdData  = string:tokens(os:cmd("ps -p "++ MysqlPid), "\n"),
 					case length(CmdData) of
 						1 ->
+							mysqlmon_util:send_router(?SERVICE, [{type, process_error}, {reason, process_doesnt_exist}, {pid,MysqlPid}]),
 							?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p ~p process doesn't exists Pid : ~p ~n", [?MODULE, ?LINE, NodeType, MysqlPid]);
 						_ ->
 							?LOGMSG(?APP_NAME,?INFO, "~p | ~p ~p process exists Pid : ~p ~n", [?MODULE, ?LINE, NodeType, MysqlPid])
 					end ;
 				{error, Reason} ->
+					mysqlmon_util:send_router(?SERVICE, [{type, ndb_pifile_error}, {reason, Reason}]),
 					?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p Error Reading file Reason : ~p ~n", [?MODULE, ?LINE, Reason]);
 				eof ->
+					mysqlmon_util:send_router(?SERVICE, [{type, ndb_pifile_error}, {reason, eof}]),
 					?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p File is empty ~n", [?MODULE, ?LINE])
 			end,
 			file:close(IoDevice);
 		{error, enoent} ->
+			mysqlmon_util:send_router(?SERVICE, [{type, ndb_pidfile_error}, {reason, enoent}]),
 			?LOGMSG(?APP_NAME, ?INFO, "~p | ~p file not found Reason : ~p ~n", [?MODULE, ?LINE, enoent]);
 		{error, eacces} ->
+			mysqlmon_util:send_router(?SERVICE, [{type, ndb_pidfile_error}, {reason, eaccess}]),
 			?LOGMSG(?APP_NAME, ?INFO, "~p | ~p file access failed Reason : ~p ~n", [?MODULE, ?LINE, eaccess]);
 		{error, Reason} ->
+			mysqlmon_util:send_router(?SERVICE, [{type, ndb_pidfile_error}, {reason, Reason}]),
 			?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p mysql pidfile missing Reason : ~p Path ~p ~n", [?MODULE, ?LINE, Reason, FilePath])
 	end,
 	{noreply, State, CheckInterval};

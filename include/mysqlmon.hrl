@@ -22,3 +22,10 @@
 -define(MYSQL_PIDFILE_SERVICE_NAME, mysqlmon_pidfile).
 
 -define(MYSQLMON_ROUTINGPG, mysqlmon_routing_pg).
+
+-record(mysqlmon_error, {
+	service = undefined,
+	type    = undefined,
+	reason  = undefined,
+	data    = []
+}).

@@ -38,6 +38,7 @@
   code_change/3]).
 
 -define(SERVER, ?MODULE).
+-define(SERVICE, ?MODULE).
 
 -record(state, {warn_threshold, crit_threshold, check_interval, dsn}).
 
@@ -139,7 +140,6 @@ handle_cast(Request, State) ->
   {noreply, NewState :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #state{}}).
 
-%% TODO - generate notifications
 handle_info(timeout, State) ->
 	CheckInterval   = State#state.check_interval,
 	Dsn             = State#state.dsn,
@@ -153,16 +153,20 @@ handle_info(timeout, State) ->
 					{_, Connections } = lists:nth(1, Rows),
 					if
 						Connections > CritThreshold ->
+							mysqlmon_util:send_router(?SERVICE,connections_issue(Connections, CritThreshold, critical)),
 							?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p mysql connections critical Connections : ~p  ~n", [?MODULE, ?LINE, Connections]);
 						Connections > WarnThreshold ->
+							mysqlmon_util:send_router(?SERVICE, connections_issue(Connections, WarnThreshold, warning)),
 							?LOGMSG(?APP_NAME, ?WARNING,"~p | ~p mysql connection warning Connections : ~p ~n", [?MODULE, ?LINE, Connections]);
 						true ->
 							?LOGMSG(?APP_NAME, ?INFO, "~p | ~p mysql connections normal Connections : ~p  ~n",[?MODULE, ?LINE, Connections])
 					end;
 					{error, Reason} ->
+						mysqlmon_util:send_router(?SERVICE, [{type, query_error}, {reason, Reason}]),
 						?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p mysql query failed Reason : ~p ~n", [?MODULE, ?LINE, Reason])
 			end;
 		{error, Reason} ->
+			mysqlmon_util:send_router(?SERVICE, [{type, odbc_connect_error}, {reason, Reason}]),
 			?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p mysql connection failed Reason : ~p ~n", [?MODULE, ?LINE, Reason])
 	end,
 	{noreply, State, CheckInterval};
@@ -204,3 +208,10 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+connections_issue(Connections, Threshold, Status) ->
+	[
+		{connections, Connections},
+		{threshold, Threshold},
+		{status, Status}
+	].
