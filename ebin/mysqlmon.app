@@ -9,7 +9,7 @@
 		{applications, [kernel, stdlib]},
 		{env, [
 		    {services, [mysqlmon_ndb_mem_server]},
-			{notification_services, [mysqlmon_eventlog_server]},
+		    {notification_services, [mysqlmon_eventlog_server]},
 		    {mysqlmon_pidfile_server, [
                     {check_interval, 3000},
                     {pidfile_path, "/var/run/mysqld/"},
@@ -30,7 +30,7 @@
                     {warn_threshold, 100},
                     {crit_threshold, 1000},
                     {check_interval, 100000},
-                    {dsn, ""}]
+                    {dsn, "UID=root;DSN=css_dev"}]
                 },
             {mysqlmon_ndb_mem_server, [
                     {warn_index, 70},

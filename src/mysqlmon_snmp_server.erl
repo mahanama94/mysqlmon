@@ -63,7 +63,7 @@ start_link() ->
 	{stop, Reason :: term()} | ignore).
 init([]) ->
 	?LOGMSG(?APP_NAME, ?INFO, "~p | ~p starting mysqlmon_snmp_server Pid : ~p ~n", [?MODULE, ?LINE,  self()]),
-%%	_Result = applications:start(snmp),
+%%	_Result = application:start(snmp),
 %%	MibName = application:get_env(mibname, mysqlmon, "MYSQLMON-MIB"),
 %%	_MibResult =
 %%	case snmps:whereis_mib(MibName) of

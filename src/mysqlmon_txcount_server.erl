@@ -16,6 +16,8 @@
 %%% Generate critical alarm if unable to connect to SQL Node.
 %%% Requires SQL permission to perform SQL "SHOW GLOBAL STATUS"
 %%% Change in Check Interval takes average of transactions of period.
+%%% Flushing in between samplings would be ignored (Even TPS goes beyond threshold)
+%%% Notifications are generated after the first check interval
 %%%
 %%% @end
 %%% Created : 09. Nov 2017 12:00 PM
@@ -41,7 +43,7 @@
 -define(SERVER, ?MODULE).
 -define(SERVICE, ?MODULE).
 
--record(state, { check_interval, warn_threshold, crit_threshold, dsn, timestamp}).
+-record(state, { check_interval, warn_threshold, crit_threshold, dsn, timestamp, stat_total}).
 
 %%%===================================================================
 %%% API
@@ -139,27 +141,36 @@ handle_info(timeout, State) ->
 	Dsn = State#state.dsn,
 	CritThreshold = State#state.crit_threshold,
 	WarnThreshold = State#state.warn_threshold,
+	LastTxCount = State#state.stat_total,
+	LastTime = State#state.timestamp,
 	NewState  =
 	case odbc:connect(Dsn, []) of
 		{ok, Ref} ->
-			case odbc:sql_query(Ref, "SHOW STATUS WHERE variable_name = 'Threads_connected'") of
+			case odbc:sql_query(Ref, "show global status  like 'Com\_%'") of
 				{selected, _Columns, Rows} ->
-					TransctionCount = get_transaction_count(Rows),
-					LastTime = State#state.timestamp,
+					NowTxCount = get_transaction_count(Rows),
 					NowTime = calendar:local_time(),
-					{Hour, Minute, Seconds} = calendar:time_difference(LastTime, NowTime),
-					Tps = TransctionCount / (Hour * 3600 + Minute * 60 + Seconds),
-					if
-						Tps > CritThreshold ->
-							mysqlmon_util:send_router(?SERVICE, transactions_critical(Tps, State)),
-							?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p mysql TPS critical TPS : ~p  ~n", [?MODULE, ?LINE, Tps]);
-						Tps > WarnThreshold ->
-							mysqlmon_util:send_router(?SERVICE, transactions_warning(Tps, State)),
-							?LOGMSG(?APP_NAME, ?WARNING,"~p | ~p mysql TPS warning TPS : ~p ~n", [?MODULE, ?LINE, Tps]);
-						true ->
-							?LOGMSG(?APP_NAME, ?INFO, "~p | ~p mysql TPS normal TPS : ~p  ~n",[?MODULE, ?LINE, Tps])
-					end,
-					State#state{ timestamp = NowTime};
+					case LastTxCount of
+						undefined ->
+							odbc:disconnect(Ref),
+							?LOGMSG(?APP_NAME, ?INFO,"~p | ~p LastTxcount undefined ~n", [?MODULE, ?LINE]),
+							State#state{ timestamp = NowTime, stat_total = NowTxCount};
+						LastTxCount ->
+							{Days, {Hour, Minute, Seconds}} = calendar:time_difference(LastTime, NowTime),
+							Tps = (NowTxCount - LastTxCount) / (Days * 86400 + Hour * 3600 + Minute * 60 + Seconds),
+							if
+								Tps > CritThreshold ->
+									mysqlmon_util:send_router(?SERVICE, transactions_critical(Tps, State)),
+									?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p mysql TPS critical TPS : ~p  ~n", [?MODULE, ?LINE, Tps]);
+								Tps > WarnThreshold ->
+									mysqlmon_util:send_router(?SERVICE, transactions_warning(Tps, State)),
+									?LOGMSG(?APP_NAME, ?WARNING,"~p | ~p mysql TPS warning TPS : ~p ~n", [?MODULE, ?LINE, Tps]);
+								true ->
+									?LOGMSG(?APP_NAME, ?INFO, "~p | ~p mysql TPS normal TPS : ~p  ~n",[?MODULE, ?LINE, Tps])
+							end,
+							odbc:disconnect(Ref),
+							State#state{ timestamp = NowTime, stat_total = NowTxCount}
+					end;
 				{error, Reason} ->
 					mysqlmon_util:send_router(?SERVICE,query_error(Reason, State)),
 					?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p mysql query failed Reason : ~p ~n", [?MODULE, ?LINE, Reason]),
@@ -170,7 +181,6 @@ handle_info(timeout, State) ->
 			?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p mysql connection failed Reason : ~p ~n", [?MODULE, ?LINE, Reason]),
 			State
 	end,
-	?LOGMSG(?APP_NAME, ?INFO,"~p | ~p handling timeout ~n", [?MODULE, ?LINE]),
 	{noreply, NewState, CheckInterval};
 
 handle_info(Info, State) ->
@@ -215,13 +225,21 @@ code_change(_OldVsn, State, _Extra) ->
 get_transaction_count(List) ->
 	get_transaction_count(List, 0).
 
-get_transaction_count([Head | Tail], Count) ->
-	{_Desc, TxCount} = Head,
-	Count + TxCount + get_transaction_count(Tail, Count);
-
+get_transaction_count([], Count) ->
+	Count;
 get_transaction_count([Head], Count) ->
-	{_Desc, TxCount} = Head,
-	Count + TxCount.
+	{_Dec, CountData} = Head,
+	{_, CountString} = rfc4627:unicode_decode(binary_to_list(CountData)),
+	TxCount = list_to_integer(CountString),
+	Count + TxCount;
+
+get_transaction_count([Head | Tail], Count) ->
+	{_Desc, CountData} = Head,
+	{_, CountString} = rfc4627:unicode_decode(binary_to_list(CountData)),
+	TxCount = list_to_integer(CountString),
+	Count + TxCount + get_transaction_count(Tail, Count).
+
+
 
 transactions_critical(Connections,State) ->
 	#mysqlmon_event{
