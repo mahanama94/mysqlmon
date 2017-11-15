@@ -9,6 +9,7 @@
 		{applications, [kernel, stdlib]},
 		{env, [
 		    {services, [mysqlmon_ndb_mem_server]},
+			{notification_services, [mysqlmon_eventlog_server]},
 		    {mysqlmon_pidfile_server, [
                     {check_interval, 3000},
                     {pidfile_path, "/var/run/mysqld/"},

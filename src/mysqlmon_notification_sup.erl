@@ -58,30 +58,38 @@ start_link() ->
   ignore |
   {error, Reason :: term()}).
 init([]) ->
-	RestartStrategy = one_for_one,
-	MaxRestarts = 1000,
+	RestartStrategy     = one_for_one,
+	MaxRestarts         = 1000,
 	MaxSecondsBetweenRestarts = 3600,
 	
 	SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
 	
-	Restart = permanent,
-	Shutdown = 2000,
-	Type = worker,
+%%	Restart = permanent,
+%%	Shutdown = 2000,
+%%	Type = worker,
 %%	ChildSpecs = [
 %%		{mysqlmon_router_server, {mysqlmon_router_server, start_link, []}, Restart, Shutdown, Type, [mysqlmon_router_server]}
 %%	],
-	ChildSpecs = [
-		server(mysqlmon_snmp_server,[])
-	],
+	Services = application:get_env(mysqlmon, notification_services, []),
+	ChildSpecs = get_childspecs(Services),
 	{ok, {SupFlags, ChildSpecs}}.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-server(Module, Args) ->
+get_childspecs([]) ->
+	[];
+
+get_childspecs([Service]) ->
+	[get_childspecs(Service)];
+
+get_childspecs([Service | Rest]) ->
+	lists:concat([[get_childspecs(Service)], get_childspecs(Rest)]);
+
+get_childspecs(Service) ->
+	Args = application:get_env(mysqlmon, Service, []),
 	Restart = permanent,
 	Shutdown = 2000,
 	Type = worker,
-	
-	{Module, {Module, start_link, Args}, Restart, Shutdown, Type, [Module]}.
+	{Service, {Service, start_link, Args}, Restart, Shutdown, Type, [Service]}.

@@ -39,6 +39,7 @@
   code_change/3]).
 
 -define(SERVER, ?MODULE).
+-define(SERVICE, ?MODULE).
 
 -record(state, { check_interval, warn_threshold, crit_threshold, dsn, timestamp}).
 
@@ -133,7 +134,6 @@ handle_cast(Request, State) ->
   {noreply, NewState :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #state{}}).
 
-%% TODO - generate notifications
 handle_info(timeout, State) ->
 	CheckInterval = State#state.check_interval,
 	Dsn = State#state.dsn,
@@ -151,18 +151,22 @@ handle_info(timeout, State) ->
 					Tps = TransctionCount / (Hour * 3600 + Minute * 60 + Seconds),
 					if
 						Tps > CritThreshold ->
+							mysqlmon_util:send_router(?SERVICE, transactions_critical(Tps, State)),
 							?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p mysql TPS critical TPS : ~p  ~n", [?MODULE, ?LINE, Tps]);
 						Tps > WarnThreshold ->
+							mysqlmon_util:send_router(?SERVICE, transactions_warning(Tps, State)),
 							?LOGMSG(?APP_NAME, ?WARNING,"~p | ~p mysql TPS warning TPS : ~p ~n", [?MODULE, ?LINE, Tps]);
 						true ->
 							?LOGMSG(?APP_NAME, ?INFO, "~p | ~p mysql TPS normal TPS : ~p  ~n",[?MODULE, ?LINE, Tps])
 					end,
 					State#state{ timestamp = NowTime};
 				{error, Reason} ->
+					mysqlmon_util:send_router(?SERVICE,query_error(Reason, State)),
 					?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p mysql query failed Reason : ~p ~n", [?MODULE, ?LINE, Reason]),
 					State
 			end;
 		{error, Reason} ->
+			mysqlmon_util:send_router(?SERVICE, odbc_error(Reason, State)),
 			?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p mysql connection failed Reason : ~p ~n", [?MODULE, ?LINE, Reason]),
 			State
 	end,
@@ -218,3 +222,47 @@ get_transaction_count([Head | Tail], Count) ->
 get_transaction_count([Head], Count) ->
 	{_Desc, TxCount} = Head,
 	Count + TxCount.
+
+transactions_critical(Connections,State) ->
+	#mysqlmon_event{
+		service = ?SERVICE,
+		type = transactions_critical,
+		description = "transactions count critical",
+		data = [
+			{transactions_count, Connections},
+			{critical_threshold, State#state.crit_threshold}
+		]
+	}.
+
+transactions_warning(Connections, State) ->
+	#mysqlmon_event{
+		service = ?SERVICE,
+		type = transactions_warning,
+		description = "transactions count warning",
+		data = [
+			{transactions_count, Connections},
+			{warning_threshold, State#state.warn_threshold}
+		]
+	}.
+
+query_error(Reason, State) ->
+	#mysqlmon_event{
+		service = ?SERVICE,
+		type = query_error,
+		description = "error executing query",
+		data = [
+			{reason, Reason},
+			{dsn, State#state.dsn}
+		]
+	}.
+
+odbc_error(Reason, State) ->
+	#mysqlmon_event{
+		service = ?SERVICE,
+		type = odbc_error,
+		description = "Odbc driver error",
+		data = [
+			{reason, Reason},
+			{dsn, State#state.dsn}
+		]
+	}.

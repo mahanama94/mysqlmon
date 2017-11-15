@@ -28,5 +28,6 @@
 	type    = undefined,
 	reason  = undefined,
 	description = "",
-	data    = []
+	data    = [],
+	timestamp = erlang:localtime()
 }).

@@ -4,9 +4,9 @@
 %%% @doc
 %%%
 %%% @end
-%%% Created : 10. Nov 2017 12:02 PM
+%%% Created : 15. Nov 2017 11:25 AM
 %%%-------------------------------------------------------------------
--module(mysqlmon_router_server).
+-module(mysqlmon_eventlog_server).
 -author("bhanuka").
 
 -include("mysqlmon.hrl").
@@ -26,7 +26,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {routing}).
+-record(state, { subscriptions, status, file_name}).
 
 %%%===================================================================
 %%% API
@@ -62,9 +62,9 @@ start_link() ->
 	{ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
 	{stop, Reason :: term()} | ignore).
 init([]) ->
-	Services = application:get_env(mysqlmon, services, []),
-	Routing = initialize_routing(Services),
-	{ok, #state{ routing = Routing}}.
+	?LOGMSG(?APP_NAME, ?INFO, "~p | ~p starting mysqlmon_eventlog_server Pid : ~p ~n", [?MODULE, ?LINE,  self()]),
+	Subscriptions = application:get_env(mysqlmon, services, []),
+	{ok, #state{subscriptions = Subscriptions,status = not_subscribed, file_name = "evnet.log"}, 500}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -81,28 +81,6 @@ init([]) ->
 	{noreply, NewState :: #state{}, timeout() | hibernate} |
 	{stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
 	{stop, Reason :: term(), NewState :: #state{}}).
-handle_call({Service, Event}, _From, State) ->
-	?LOGMSG(?APP_NAME, ?INFO, "~p | ~p Service : ~p Event : ~p ~n", [?MODULE,?LINE, Service, Event]),
-	case proplists:get_value(Service, State#state.routing) of
-		undefined ->
-			ok;
-		RoutingInfo ->
-			lists:foreach(fun(Pid) -> gen_server:cast(Pid,{Service, Event}) end, RoutingInfo)
-	end,
-	{reply, ok, State};
-
-handle_call({subscribe, Service, Pid}, _From, State) ->
-	?LOGMSG(?APP_NAME, ?INFO, "~p | ~p registering Pid : ~p for Service : ~p ~n", [?MODULE, ?LINE, Pid, Service]),
-	NewState =
-	case proplists:get_value(Service, State#state.routing) of
-		undefined ->
-			State;
-		RoutingInfo ->
-			Routing = lists:keyreplace(Service, 1, State#state.routing, {Service, lists:append(RoutingInfo, [Pid])}),
-			State#state{routing = Routing}
-	end,
-	{reply, ok, NewState};
-
 handle_call(_Request, _From, State) ->
 	{reply, ok, State}.
 
@@ -117,7 +95,13 @@ handle_call(_Request, _From, State) ->
 	{noreply, NewState :: #state{}} |
 	{noreply, NewState :: #state{}, timeout() | hibernate} |
 	{stop, Reason :: term(), NewState :: #state{}}).
-handle_cast(_Request, State) ->
+
+handle_cast({Service, #mysqlmon_event{} = Event}, State) ->
+	?LOGMSG(?APP_NAME, ?INFO, "~p | ~p notification Service: ~p Event : ~p ~n", [?MODULE, ?LINE, Service, Event]),
+	{noreply, State};
+
+handle_cast(Request, State) ->
+	?LOGMSG(?APP_NAME, ?WARNING, "~p | ~p usupported handle_cast Request : ~p ~n", [?MODULE, ?LINE, Request]),
 	{noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -134,7 +118,13 @@ handle_cast(_Request, State) ->
 	{noreply, NewState :: #state{}} |
 	{noreply, NewState :: #state{}, timeout() | hibernate} |
 	{stop, Reason :: term(), NewState :: #state{}}).
-handle_info(_Info, State) ->
+handle_info(timeout, #state{ status = not_subscribed} = State) ->
+	Services = State#state.subscriptions,
+	subscribe_services(Services),
+	{noreply, State#state{ status = subscribed}};
+
+handle_info(Info, State) ->
+	?LOGMSG(?APP_NAME, ?WARNING, "~p | ~p unsupported handle_info Info : ~p ~n", [?MODULE, ?LINE, Info]),
 	{noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -171,5 +161,5 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-initialize_routing(Services) ->
-	lists:map(fun(Service) -> {Service, []} end, Services).
+subscribe_services(Services) ->
+	lists:map(fun(Service) -> mysqlmon_util:subscribe_service(Service, self()) end, Services).

@@ -128,7 +128,7 @@ handle_cast(Request, State) ->
   {noreply, NewState :: #state{}} |
   {noreply, NewState :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #state{}}).
-%% TODO - send notification
+
 handle_info(timeout, State) ->
 	CheckInterval = State#state.check_interval,
 	PidFileName = State#state.pidfile_name,
