@@ -19,7 +19,7 @@
 %%% @end
 %%% Created : 09. Nov 2017 12:01 PM
 %%%-------------------------------------------------------------------
--module(mysqlmon_con_count_server).
+-module(mysqlmon_concount_server).
 -author("bhanuka").
 
 -include("mysqlmon.hrl").
@@ -150,7 +150,9 @@ handle_info(timeout, State) ->
 		{ok, Ref} ->
 			case odbc:sql_query(Ref, "SHOW STATUS WHERE variable_name = 'Threads_connected'") of
 				{selected, _Columns, Rows} ->
-					{_, Connections } = lists:nth(1, Rows),
+					{_, Count } = lists:nth(1, Rows),
+					{_, CountString} = rfc4627:unicode_decode(binary_to_list(Count)),
+					Connections = list_to_integer(CountString),
 					if
 						Connections > CritThreshold ->
 							mysqlmon_util:send_router(?SERVICE,connections_critical(Connections, State)),
@@ -164,7 +166,8 @@ handle_info(timeout, State) ->
 					{error, Reason} ->
 						mysqlmon_util:send_router(?SERVICE, query_error(Reason, State)),
 						?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p mysql query failed Reason : ~p ~n", [?MODULE, ?LINE, Reason])
-			end;
+			end,
+			odbc:disconnect(Ref);
 		{error, Reason} ->
 			mysqlmon_util:send_router(?SERVICE, odbc_error(Reason, State)),
 			?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p mysql connection failed Reason : ~p ~n", [?MODULE, ?LINE, Reason])
