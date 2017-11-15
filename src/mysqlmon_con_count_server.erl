@@ -153,20 +153,20 @@ handle_info(timeout, State) ->
 					{_, Connections } = lists:nth(1, Rows),
 					if
 						Connections > CritThreshold ->
-							mysqlmon_util:send_router(?SERVICE,connections_issue(Connections, CritThreshold, critical)),
+							mysqlmon_util:send_router(?SERVICE,connections_critical(Connections, State)),
 							?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p mysql connections critical Connections : ~p  ~n", [?MODULE, ?LINE, Connections]);
 						Connections > WarnThreshold ->
-							mysqlmon_util:send_router(?SERVICE, connections_issue(Connections, WarnThreshold, warning)),
+							mysqlmon_util:send_router(?SERVICE, connections_warning(Connections, State)),
 							?LOGMSG(?APP_NAME, ?WARNING,"~p | ~p mysql connection warning Connections : ~p ~n", [?MODULE, ?LINE, Connections]);
 						true ->
 							?LOGMSG(?APP_NAME, ?INFO, "~p | ~p mysql connections normal Connections : ~p  ~n",[?MODULE, ?LINE, Connections])
 					end;
 					{error, Reason} ->
-						mysqlmon_util:send_router(?SERVICE, [{type, query_error}, {reason, Reason}]),
+						mysqlmon_util:send_router(?SERVICE, query_error(Reason, State)),
 						?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p mysql query failed Reason : ~p ~n", [?MODULE, ?LINE, Reason])
 			end;
 		{error, Reason} ->
-			mysqlmon_util:send_router(?SERVICE, [{type, odbc_connect_error}, {reason, Reason}]),
+			mysqlmon_util:send_router(?SERVICE, odbc_error(Reason, State)),
 			?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p mysql connection failed Reason : ~p ~n", [?MODULE, ?LINE, Reason])
 	end,
 	{noreply, State, CheckInterval};
@@ -209,9 +209,46 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-connections_issue(Connections, Threshold, Status) ->
-	[
-		{connections, Connections},
-		{threshold, Threshold},
-		{status, Status}
-	].
+connections_critical(Connections,State) ->
+	#mysqlmon_event{
+		service = ?SERVICE,
+		type = connections_critical,
+		description = "connections count critical",
+		data = [
+			{connections_count, Connections},
+			{critical_threshold, State#state.crit_threshold}
+			]
+	}.
+
+connections_warning(Connections, State) ->
+	#mysqlmon_event{
+		service = ?SERVICE,
+		type = connections_warning,
+		description = "connections count warning",
+		data = [
+			{connections_count, Connections},
+			{warning_threshold, State#state.warn_threshold}
+		]
+	}.
+
+query_error(Reason, State) ->
+	#mysqlmon_event{
+		service = ?SERVICE,
+		type = query_error,
+		description = "error executing query",
+		data = [
+			{reason, Reason},
+			{dsn, State#state.dsn}
+		]
+	}.
+
+odbc_error(Reason, State) ->
+	#mysqlmon_event{
+		service = ?SERVICE,
+		type = odbc_error,
+		description = "Odbc driver error",
+		data = [
+			{reason, Reason},
+			{dsn, State#state.dsn}
+		]
+	}.

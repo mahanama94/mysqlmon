@@ -8,7 +8,7 @@
 %%%-------------------------------------------------------------------
 -author("bhanuka").
 
--define(APP_NAME, "mysqlmon").
+-define(APP_NAME, mysqlmon).
 
 -define(INFO, 15).
 
@@ -23,9 +23,10 @@
 
 -define(MYSQLMON_ROUTINGPG, mysqlmon_routing_pg).
 
--record(mysqlmon_error, {
+-record(mysqlmon_event, {
 	service = undefined,
 	type    = undefined,
 	reason  = undefined,
+	description = "",
 	data    = []
 }).

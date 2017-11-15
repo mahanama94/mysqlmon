@@ -63,6 +63,17 @@ start_link() ->
 	{stop, Reason :: term()} | ignore).
 init([]) ->
 	?LOGMSG(?APP_NAME, ?INFO, "~p | ~p starting mysqlmon_snmp_server Pid : ~p ~n", [?MODULE, ?LINE,  self()]),
+%%	_Result = applications:start(snmp),
+%%	MibName = application:get_env(mibname, mysqlmon, "MYSQLMON-MIB"),
+%%	_MibResult =
+%%	case snmps:whereis_mib(MibName) of
+%%		{ok, _Path} ->
+%%			ok;
+%%		{error, not_found} ->
+%%			PrivDir = code:priv_dir(?APP_NAME),
+%%			?LOGMSG(?APP_NAME, ?INFO, "~p |~p PrivDir : ~p ~n", [?MODULE, ?LINE, PrivDir]),
+%%			snmpa:load_mibs([PrivDir ++ "/mibs/" ++ MibName])
+%%	end,
 	Subscriptions = application:get_env(mysqlmon, services, []),
 	{ok, #state{subscriptions = Subscriptions, status = not_subscribed}, 1000}.
 
@@ -97,7 +108,8 @@ handle_call(Request, _From, State) ->
 	{noreply, NewState :: #state{}} |
 	{noreply, NewState :: #state{}, timeout() | hibernate} |
 	{stop, Reason :: term(), NewState :: #state{}}).
-handle_cast(_Request, State) ->
+handle_cast(Request, State) ->
+	?LOGMSG(?APP_NAME, ?LINE, "~p | ~p unsupported handle_cast Rquest : ~p ~n", [?MODULE,?LINE, Request]),
 	{noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -137,7 +149,9 @@ handle_info(Info, State) ->
 %%--------------------------------------------------------------------
 -spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
 	State :: #state{}) -> term()).
-terminate(_Reason, _State) ->
+terminate(Reason, _State) ->
+	?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p terminating mysqlmon_snmp_server Reason : ~p ~n", [?MODULE, ?LINE, Reason]),
+	%% TODO - delete subscriptions
 	ok.
 
 %%--------------------------------------------------------------------

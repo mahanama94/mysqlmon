@@ -40,7 +40,7 @@
 -define(SERVER, ?MODULE).
 -define(SERVICE, ?MODULE).
 
--record(state, {warn_index, crit_index, warn_data, crit_data, check_interval}).
+-record(state, {warn_index, crit_index, warn_data, crit_data, check_interval, command}).
 
 %%%===================================================================
 %%% API
@@ -83,8 +83,9 @@ init(Args) ->
 	CritIndex       = proplists:get_value(crit_index, Args, 90),
 	WarnData        = proplists:get_value(warn_index, Args, 70),
 	CritData        = proplists:get_value(crit_index, Args, 80),
-	
-	{ok, #state{check_interval = CheckInterval, warn_index = WarnIndex, crit_index = CritIndex, warn_data = WarnData,crit_data = CritData}, CheckInterval}.
+	Command         = "ndb_mgm -e 'all report memory'",
+	{ok, #state{check_interval = CheckInterval, warn_index = WarnIndex, crit_index = CritIndex, warn_data = WarnData,
+		crit_data = CritData, command = Command}, CheckInterval}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -136,7 +137,7 @@ handle_cast(_Request, State) ->
 %% TODO -complete issue reporting
 handle_info(timeout, State) ->
 	CheckInterval = State#state.check_interval,
-	CmdData = os:cmd("ndb_mgm -e 'all report memory'"),
+	CmdData = os:cmd(State#state.command),
 %%	CmdData = "Connected to Management Server at: 192.168.20.20:1186\nNode 2: Data usage is 69%(272875 32K pages of total 393216)\nNode 2: Index usage is 48%(378595 8K pages of total 786464)\nNode 3: Data usage is 69%(272929 32K pages of total 393216)\nNode 3: Index usage is 48%(378654 8K pages of total 786464)\n\n",
 	case string:str(CmdData, "not found") of
 		0 ->
@@ -151,10 +152,10 @@ handle_info(timeout, State) ->
 							mysqlmon_util:send_router(?SERVICE,NodeIssues)
 					end;
 				_Other ->
-					mysqlmon_util:send_router(?SERVICE, unable_to_connect)
+					mysqlmon_util:send_router(?SERVICE, connection_error(CmdData, State))
 			end;
 		_Other ->
-			mysqlmon_util:send_router(?SERVICE, command_not_founud)
+			mysqlmon_util:send_router(?SERVICE, command_error(CmdData, State))
 	end,
 	
 	{noreply, State, CheckInterval};
@@ -240,28 +241,55 @@ check_nodes(NodeData, State) ->
 		{NodeId, MemData, index} ->
 			if
 				MemData > State#state.crit_index ->
-					memory_issue(NodeId, MemData, State#state.crit_index, index, critical);
+					memory_issue(NodeId, MemData, State, index_memory_critical);
 				MemData > State#state.warn_index ->
-					memory_issue(NodeId, MemData, State#state.crit_index, index, warning);
+					memory_issue(NodeId, MemData, State, index_memory_warning);
 				true ->
 					ok
 			end;
 		{NodeId, MemData, data} ->
 			if
 				MemData > State#state.crit_data ->
-					memory_issue(NodeId, MemData, State#state.crit_index, data, critical);
+					memory_issue(NodeId, MemData, State, data_memory_critical);
 				MemData > State#state.warn_data ->
-					memory_issue(NodeId, MemData, State#state.crit_index, data, warning);
+					memory_issue(NodeId, MemData, State, data_memory_warning);
 				true ->
 					ok
 			end
 	end.
 
-memory_issue(NodeId, MemData, Threshold, MemType, IssueType) ->
-	[
-		{node_id, NodeId},
-		{memory, MemData},
-		{threshold, Threshold},
-		{memory_type, MemType},
-		{issue_type, IssueType}
-	].
+memory_issue(NodeId, MemData, State, IssueType) ->
+	#mysqlmon_event{
+		service = ?SERVICE,
+		type = IssueType,
+		description = "Memory warning",
+		data = [
+			{node_id, NodeId},
+			{memory, MemData},
+			{critical_index_threshold, State#state.crit_index},
+			{warning_index_threshold, State#state.warn_index},
+			{critical_data_threshold, State#state.crit_data},
+			{warning_data_threshold, State#state.warn_data}
+		]
+	}.
+
+connection_error(CmdData, _State) ->
+	#mysqlmon_event{
+		service = ?SERVICE,
+		type = connection_error,
+		description = "unable to connect with cluster nodes",
+		data = [
+			{command_result, CmdData}
+		]
+	}.
+
+command_error(CmdData, State) ->
+	#mysqlmon_event{
+		service = ?SERVICE,
+		type = command_error,
+		description = "command error",
+		data = [
+			{command_result, CmdData},
+			{command, State#state.command}
+		]
+	}.

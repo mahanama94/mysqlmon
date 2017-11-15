@@ -20,6 +20,17 @@
 %% API
 -export([send_router/2, subscribe_service/2]).
 
+send_router(ServiceName, [Data]) ->
+	send_router(ServiceName, Data);
+
+send_router(ServiceName, [Data| Rest]) ->
+	case send_router(ServiceName, Data) of
+		ok ->
+			send_router(ServiceName, Rest);
+		_ ->
+			send_router(ServiceName, lists:concat([[Data], Rest]))
+	end;
+
 send_router(ServiceName, Data) ->
 	gen_server:call(mysqlmon_router_server, {ServiceName, Data}).
 

@@ -142,28 +142,27 @@ handle_info(timeout, State) ->
 				CmdData  = string:tokens(os:cmd("ps -p "++ MysqlPid), "\n"),
 				case length(CmdData) of
 					1 ->
-						mysqlmon_util:send_router(?SERVICE, [{type, process_error}, {reason, process_doesnt_exist}]),
+						mysqlmon_util:send_router(?SERVICE, process_error(MysqlPid, State)),
 						?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p mysql process doesn't exists Pid : ~p ~n", [?MODULE, ?LINE, MysqlPid]);
 					_ ->
-						mysqlmon_util:send_router()
 						?LOGMSG(?APP_NAME,?INFO, "~p | ~p mysql process exists Pid : ~p ~n", [?MODULE, ?LINE, MysqlPid])
 				end ;
 			{error, Reason} ->
-				mysqlmon_util:send_router(?SERVICE, error_reading_pidfile),
+				mysqlmon_util:send_router(?SERVICE, pidfile_error(Reason, State)),
 				?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p Error Reading file Reason : ~p ~n", [?MODULE, ?LINE, Reason]);
 			eof ->
-				mysqlmon_util:send_router(?SERVICE, pidfile_empty),
+				mysqlmon_util:send_router(?SERVICE, pidfile_error(eof, State)),
 				?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p File is empty ~n", [?MODULE, ?LINE])
 		end,
 		file:close(IoDevice);
 	{error, enoent} ->
-		mysqlmon_util:send_router(?SERVICE, file_not_found),
+		mysqlmon_util:send_router(?SERVICE, pidfile_error(enoent, State)),
 		?LOGMSG(?APP_NAME, ?INFO, "~p | ~p file not found Reason : ~p ~n", [?MODULE, ?LINE, enoent]);
 	{error, eacces} ->
-		mysqlmon_util:send_router(?SERVICE, file_access_denied),
+		mysqlmon_util:send_router(?SERVICE, pidfile_error(eaccess, State)),
 		?LOGMSG(?APP_NAME, ?INFO, "~p | ~p file access failed Reason : ~p ~n", [?MODULE, ?LINE, eaccess]);
 	{error, Reason} ->
-		mysqlmon_util:send_router(?SERVICE, file_error),
+		mysqlmon_util:send_router(?SERVICE, pidfile_error(Reason, State)),
 		?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p mysql pidfile missing Reason : ~p Path ~p ~n", [?MODULE, ?LINE, Reason, FilePath])
 	end,
 	{noreply, State, CheckInterval};
@@ -206,3 +205,35 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+pidfile_error(Reason, State) ->
+	Description =
+		case Reason of
+			eof ->
+				"empty pid file";
+			enoent ->
+				"empty pid file";
+			eaccess ->
+				"error accessing";
+			Other ->
+				Other
+		end,
+	#mysqlmon_event{
+		service = ?SERVICE,
+		type = pidfile_error,
+		description = Description,
+		data = [
+			{pidfile_path, State#state.pidfile_path}
+		]
+	}.
+
+process_error(MysqlPid, State) ->
+	#mysqlmon_event{
+		service = ?SERVICE,
+		type = process_error,
+		description = "mysqld process not found",
+		data = [
+			{process_id, MysqlPid},
+			{pidfile_path, State#state.pidfile_path}
+		]
+	}.
