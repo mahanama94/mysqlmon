@@ -146,6 +146,7 @@ handle_info(timeout, State) ->
 					ProcessedData = process_cmd_data(CmdData),
 					case check_nodes(ProcessedData,State) of
 						ok->
+							?LOGMSG(?APP_NAME, ?INFO, "~p | ~p Nodes ok Status : ~p ~n", [?MODULE, ?LINE, ProcessedData]),
 							ok;
 						NodeIssues ->
 							?LOGMSG(?APP_NAME, ?INFO, "~p | ~p Node Issues : ~p ~n", [?MODULE, ?LINE, NodeIssues]),

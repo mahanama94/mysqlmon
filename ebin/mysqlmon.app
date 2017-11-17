@@ -24,13 +24,14 @@
             {mysqlmon_txcount_server, [
                     {warn_threshold, 100},
                     {crit_threshold, 1000},
-                    {check_interval, 100000}]
+                    {check_interval, 3000},
+                    {dsn, "UID=root;DSN=test"}]
                 },
             {mysqlmon_concount_server, [
                     {warn_threshold, 100},
                     {crit_threshold, 1000},
-                    {check_interval, 100000},
-                    {dsn, "UID=root;DSN=css_dev"}]
+                    {check_interval, 3000},
+                    {dsn, "UID=root;DSN=test"}]
                 },
             {mysqlmon_ndb_mem_server, [
                     {warn_index, 70},

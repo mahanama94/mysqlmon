@@ -85,7 +85,16 @@ init(Args) ->
 	CheckInterval   = proplists:get_value(check_interval, Args, 10000),
 	Dsn             = proplists:get_value(dsn, Args, ""),
 	TimeStamp       = calendar:local_time(),
-	{ok, #state{warn_threshold = WarnThreshold, crit_threshold = CritThreshold, check_interval = CheckInterval, dsn = Dsn, timestamp = TimeStamp}, CheckInterval}.
+	case odbc:start() of
+		ok ->
+			{ok, #state{warn_threshold = WarnThreshold, crit_threshold = CritThreshold, check_interval = CheckInterval, dsn = Dsn, timestamp = TimeStamp}, CheckInterval};
+		{error, {already_started, odbc}} ->
+			{ok, #state{warn_threshold = WarnThreshold, crit_threshold = CritThreshold, check_interval = CheckInterval, dsn = Dsn, timestamp = TimeStamp}, CheckInterval};
+		{error, Reason} ->
+			?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p odbc start error Reason : ~p ~n", [?MODULE, ?LINE, Reason]),
+			{stop, normal}
+	end.
+
 
 %%--------------------------------------------------------------------
 %% @private
