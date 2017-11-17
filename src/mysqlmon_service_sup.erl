@@ -78,10 +78,10 @@ get_childspecs([]) ->
 
 get_childspecs([Service| Rest]) ->
 	lists:concat([[get_childspecs(Service)] , get_childspecs(Rest)]);
-	
+
 get_childspecs([Service]) ->
 	get_childspecs(Service);
-	
+
 get_childspecs(Service) ->
 	Restart = permanent,
 	Shutdown = 2000,

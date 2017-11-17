@@ -92,4 +92,4 @@ get_childspecs(Service) ->
 	Restart = permanent,
 	Shutdown = 2000,
 	Type = worker,
-	{Service, {Service, start_link, Args}, Restart, Shutdown, Type, [Service]}.
+	{Service, {Service, start_link, [Args]}, Restart, Shutdown, Type, [Service]}.
