@@ -68,7 +68,7 @@ init(Args) ->
 	MibName     = proplists:get_value(mib_name, Args, 'MYSQLMON-MIB'),
 	Receiver = proplists:get_value(receiver, Args, no_receiver),
 	application:set_env(snmp, agent, [{config, [{dir, ConfDir}]}, {db_dir, DbDir}]),
-	application:start(snmp),
+%%	application:start(snmp),
 	
 	case snmpa:whereis_mib(MibName) of
 		{ok, _Path} ->
