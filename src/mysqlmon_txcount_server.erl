@@ -58,7 +58,8 @@
 -spec(start_link(Args :: term()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link(Args) ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, Args, []).
+	Name = proplists:get_value(name, Args, ?SERVER),
+	gen_server:start_link({local, Name}, ?MODULE, Args, []).
 
 %%%===================================================================
 %%% gen_server callbacks

@@ -66,7 +66,6 @@ init([]) ->
 	
 	Services = application:get_env(mysqlmon, services, []),
 	ChildSpecs = get_childspecs(Services),
-
 	{ok, {SupFlags, ChildSpecs}}.
 
 %%%===================================================================
@@ -77,10 +76,16 @@ get_childspecs([]) ->
 	[];
 
 get_childspecs([Service| Rest]) ->
-	lists:concat([[get_childspecs(Service)] , get_childspecs(Rest)]);
+	get_childspecs(Service) ++  get_childspecs(Rest);
 
 get_childspecs([Service]) ->
 	get_childspecs(Service);
+
+get_childspecs(mysqlmon_concount_server) ->
+	get_childspecs(mysqlmon_concount_server, 1);
+
+get_childspecs(mysqlmon_txcount_server) ->
+	get_childspecs(mysqlmon_txcount_server, 1);
 
 get_childspecs(Service) ->
 	Restart = permanent,
@@ -88,6 +93,36 @@ get_childspecs(Service) ->
 	Type = worker,
 	
 	AppConfig = application:get_env(mysqlmon, Service, []),
-	{Service, {Service, start_link, [AppConfig]}, Restart,Shutdown, Type, [Service]}.
+	[{Service, {Service, start_link, [AppConfig]}, Restart,Shutdown, Type, [Service]}].
 	
-	
+get_childspecs(mysqlmon_concount_server, Count) ->
+	AppConfig = application:get_env(mysqlmon, mysqlmon_concount_server, []),
+	DsnList = proplists:get_value(dsn, AppConfig),
+	case Count > length(DsnList) of
+		true ->
+			[];
+		_ ->
+			Restart = permanent,
+			Shutdown = 2000,
+			Type = worker,
+			Name = list_to_atom(atom_to_list(mysqlmon_concount_server) ++ "_" ++ integer_to_list(Count)),
+			Args = proplists:delete(dsn, AppConfig) ++ [{dsn, lists:nth(Count, DsnList)}, {name, Name}],
+			[{Name, {mysqlmon_concount_server, start_link, [Args]},
+				Restart, Shutdown, Type, [mysqlmon_concount_server]}] ++  get_childspecs(mysqlmon_concount_server, Count + 1)
+	end;
+
+get_childspecs(mysqlmon_txcount_server, Count) ->
+	AppConfig = application:get_env(mysqlmon, mysqlmon_txcount_server, []),
+	DsnList = proplists:get_value(dsn, AppConfig),
+	case Count > length(DsnList) of
+		true ->
+			[];
+		_ ->
+			Restart = permanent,
+			Shutdown = 2000,
+			Type = worker,
+			Name = list_to_atom(atom_to_list(mysqlmon_txcount_server) ++ "_" ++ integer_to_list(Count)),
+			Args = proplists:delete(dsn, AppConfig) ++ [{dsn, lists:nth(Count, DsnList)}, {name, Name}],
+			[{Name, {mysqlmon_txcount_server, start_link, [Args]},
+				Restart, Shutdown, Type, [mysqlmon_txcount_server]}] ++  get_childspecs(mysqlmon_txcount_server, Count + 1)
+	end.
