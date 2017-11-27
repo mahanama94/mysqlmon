@@ -18,7 +18,7 @@
 -include("mysqlmon.hrl").
 
 %% API
--export([send_router/2, subscribe_service/2]).
+-export([send_router/2, subscribe_service/2, unsubscribe_service/2]).
 -export([custom_date/1, custom_date/0]).
 
 %%% Communication Utils
@@ -36,8 +36,16 @@ send_router(ServiceName, [Data| Rest]) ->
 send_router(ServiceName, Data) ->
 	gen_server:call(mysqlmon_router_server, {ServiceName, Data}).
 
+%% TODO - implement subscribe all method
 subscribe_service(Service, Pid) ->
 	gen_server:call(mysqlmon_router_server, {subscribe, Service, Pid}).
+
+unsubscribe_service(all, Pid) ->
+	gen_server:call(mysqlmon_router_server, {unsubscribe, Pid});
+
+unsubscribe_service(_Service, Pid) ->
+%% TODO - implement
+	unsubscribe_service(all, Pid).
 
 %%% Data Conversion Utils
 custom_date() ->

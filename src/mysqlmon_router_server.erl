@@ -103,6 +103,11 @@ handle_call({subscribe, Service, Pid}, _From, State) ->
 	end,
 	{reply, ok, NewState};
 
+handle_call({unsubscribe, Pid}, _From, State) ->
+	RoutingInfo     = State#state.routing,
+	NewRoutingInfo  = delete_notification_routing(Pid, RoutingInfo),
+	{reply, ok, State#state{routing = NewRoutingInfo}};
+
 handle_call(_Request, _From, State) ->
 	{reply, ok, State}.
 
@@ -173,3 +178,11 @@ code_change(_OldVsn, State, _Extra) ->
 
 initialize_routing(Services) ->
 	lists:map(fun(Service) -> {Service, []} end, Services).
+
+delete_notification_routing(Pid, [RoutingInfo| Other]) ->
+	delete_notification_routing(Pid, RoutingInfo) ++ delete_notification_routing(Pid, Other);
+
+delete_notification_routing(Pid, RoutingInfo) ->
+	{Service, PidList} = RoutingInfo,
+	NewPidList = lists:delete(Pid, PidList),
+	[{Service, NewPidList}].

@@ -171,7 +171,7 @@ handle_info(Info, State) ->
 	State :: #state{}) -> term()).
 terminate(Reason, _State) ->
 	?LOGMSG(?APP_NAME, ?ERROR, "~p | ~p terminating mysqlmon_snmp_server Reason : ~p ~n", [?MODULE, ?LINE, Reason]),
-	%% TODO - delete subscriptions
+	mysqlmon_util:unsubscribe_service(all, self()),
 	ok.
 
 %%--------------------------------------------------------------------
